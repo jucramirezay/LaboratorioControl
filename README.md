@@ -9,12 +9,12 @@ npm install nombrePaquete --save
 
 En muchos casos es necesario el uso del super usuario (sudo) para realizar la instalación de manera correcta. La isntalación se debe realizar en la carpeta raiz del servidor, es decir, la caperta donde esta ubicado el archivo broker.js. A continuación se brinda el ejemplo de como instalar los paquetes utilizados en el servidor.
 
-sudo npm install chart.js --save
-sudo npm install ejs --save
-sudo npm install express --save
-sudo npm install mosca --save
-sudo npm install mqtt --save
-sudo npm install socket.io --save
+sudo npm install chart.js --save \\
+sudo npm install ejs --save \\
+sudo npm install express --save \\
+sudo npm install mosca --save \\
+sudo npm install mqtt --save \\
+sudo npm install socket.io --save \\
 
 Estos paquete se instalan en una carpeta llamada node_modules, la cual se ubica en la carpeta donde se realizó la instalación. 
 
