@@ -1,0 +1,373 @@
+#include <Wire.h>
+#include <VL53L0X.h>
+#include <elapsedMillis.h> 
+#include <SPI.h>
+
+VL53L0X sensor;
+
+//Constantes de tiempo de comunicacion
+int timeCom = 300;
+
+float datakp = 0.45;
+float dataki = 0.30;
+float datakd = 0.051;
+float dataref = 5;
+float dataPeriodo = 8;
+String datakdAnt;
+String datakiAnt;
+String datakpAnt;
+String datarefAnt;
+String dataPeriodoAnt;
+float r = dataref;
+bool banderakp = false;
+bool banderaki = false;
+bool banderakd = false;
+bool banderaref = false;
+bool banderaPeriodo = false;
+float i=0;
+
+// Definiciones de pines de entrada - salida
+char pinPWM1 = 10;
+
+// punto de equilibrio 460
+
+// Variables del lazo de control
+float y = 0;   // variable de desviacion
+float y_fil; // variable filtrada
+float u = 0;          //  senal de control de desciacion
+float  usat = 0;       //  senal de control 
+float P = 0;          //  parte proporcional
+float I = 0;          //  parte integral
+float D = 0;          //  parte derivativa  
+float e = 0;          //  error e[k]
+float e_ant;          //  error e[k-1]   
+float y_ant = 0;      //  y[k-1]  
+   
+int n = 0;
+float uanal;
+
+// definicion del tiempo de muestreo
+unsigned  h = 30;       // tiempo de muestreo en milisegundos
+float hseg = float(h)/1000;
+unsigned long h_us = h*1000; // tiempo en us para control del loop
+
+elapsedMicros loopTime;      
+elapsedMillis miliTime;
+elapsedMillis comunicationTime;
+
+// constantes del PID con antiwindup
+float kp = datakp ;     // constante proporcional
+float ki = dataki;      // constante integral
+float kd = datakd;        // constante derivativa
+
+float b = 1;
+float Tf = .1;
+float Tt = 0.05; 
+
+// Constantes de escala
+float br = hseg/Tt;
+float ad = Tf/(Tf + hseg);
+float bd = kd/(Tf + hseg);  
+float bi =  ki*hseg;  // constante ki escalizada
+
+// Constantes de calibracion
+float offset = -2;   // offset para escalizacion exacta
+float cal = 32 - offset; //  
+
+// Constantes de escalizacion voltios
+float pwm2volts = (float)12/1023;  
+float volts2pwm = (float)1023/12;
+float u_eq = 6.1;       //  u en el punto de operacion
+int contador = 0;
+
+// Constantes de la referencia
+long  Tstepmil;
+
+// variables de estado del filtro
+float x1=0, x1n=0;
+float x2=0, x2n=0;
+
+class ESPMaster {
+  private:
+    uint8_t _ss_pin = 9;
+
+  public:
+    ESPMaster(uint8_t pin): _ss_pin(9) {}
+    void begin() {
+      pinMode(_ss_pin, OUTPUT);
+      digitalWrite(_ss_pin, HIGH);
+    }
+
+    uint32_t readStatus() {
+      digitalWrite(_ss_pin, LOW);
+      SPI.transfer(0x04);
+      uint32_t status = (SPI.transfer(0) | ((uint32_t)(SPI.transfer(0)) << 8) | ((uint32_t)(SPI.transfer(0)) << 16) | ((uint32_t)(SPI.transfer(0)) << 24));
+      digitalWrite(_ss_pin, HIGH);
+      return status;
+    }
+
+    void writeStatus(uint32_t status) {
+      digitalWrite(_ss_pin, LOW);
+      SPI.transfer(0x01);
+      SPI.transfer(status & 0xFF);
+      SPI.transfer((status >> 8) & 0xFF);
+      SPI.transfer((status >> 16) & 0xFF);
+      SPI.transfer((status >> 24) & 0xFF);
+      digitalWrite(_ss_pin, HIGH);
+    }
+
+    void readData(uint8_t * data) {
+      digitalWrite(_ss_pin, LOW);
+      SPI.transfer(0x03);
+      SPI.transfer(0x00);
+      for (uint8_t i = 0; i < 32; i++) {
+        data[i] = SPI.transfer(0);
+      }
+      digitalWrite(_ss_pin, HIGH);
+    }
+
+    void writeData(uint8_t * data, size_t len) {
+      uint8_t i = 0;
+      digitalWrite(_ss_pin, LOW);
+      SPI.transfer(0x02);
+      SPI.transfer(0x00);
+      while (len-- && i < 32) {
+        SPI.transfer(data[i++]);
+      }
+      while (i++ < 32) {
+        SPI.transfer(0);
+      }
+      digitalWrite(_ss_pin, HIGH);
+    }
+
+    String readData() {
+      char data[33];
+      data[32] = 0;
+      readData((uint8_t *)data);
+      return String(data);
+    }
+
+    void writeData(const char * data) {
+      writeData((uint8_t *)data, strlen(data));
+    }
+};
+
+ESPMaster esp(SS);
+
+void send(const char * message) {
+  esp.writeData(message);
+}
+
+void setup() {
+    Serial.begin(2000000);
+    Wire.begin();
+    SPI.begin();
+    esp.begin();
+    pinMode(pinPWM1, OUTPUT); 
+    analogWrite10(u_eq*volts2pwm);    
+    pinMode(A0, OUTPUT);
+    digitalWrite(A0, HIGH);
+    delay(20); 
+    setupPWM10();    
+    sensor.setTimeout(500);
+    
+    if(!sensor.init()) {
+        resetSensor();   
+    }
+    sensor.setMeasurementTimingBudget(20000);
+}
+
+// main loop es la rutina de control
+
+void loop(){
+  y = cal - (float) sensor.readRangeSingleMillimeters()/10 ;   
+  loopTime =0;
+   // Generacin de referencia cuadrada
+  n+=1;
+  
+  kp = datakp;     // constante proporcional
+  ki = dataki;      // constante integral
+  kd = datakd;
+  
+  Serial.print("Valor kp: ");
+  Serial.println(kp);
+  Serial.print("Valor kd: ");
+  Serial.println(kd);
+  Serial.print("Valor ki: ");
+  Serial.println(ki);
+  Serial.print("Valor referencia: ");
+  Serial.println(dataref);
+  Serial.print("Valor periodo: ");
+  Serial.println(dataPeriodo);
+  
+  
+  bd = kd/(Tf + hseg);  
+  bi =  ki*hseg;  // constante ki escalizada
+  
+  Tstepmil = dataPeriodo*1000; // semiperiodo de la referencia cuadrada en microsegundos
+        
+   if (miliTime >= Tstepmil) {  
+        r = -r;
+        miliTime=0;
+        if(r > 0) {
+          contador = 1;
+        } else {
+          contador = 0;
+        }
+   }
+
+    if(contador == 1) {
+      r = dataref;
+    } else {
+      r = -dataref;
+    }
+
+  // inicio de la rutina de control 
+
+    y_fil = filtro(y);
+    P = kp*(b*r - y);
+    D = ad*D - bd*(y - y_ant);
+    u =  u_eq + P + I + D; // señal de control en voltios
+    usat = saturate(u, 0, 12); //señal de control saturada
+    analogWrite10(usat*volts2pwm); // Enviar señal de control en bits 
+    //I = I + bi*(dataref-y) + br*(usat-u) ; // Calculo de la integral con antiwindyo   
+    I = I + bi*(r-y) + br*(usat-u) ; // Calculo de la integral con antiwindyo   
+    y_ant=y;
+
+  if(comunicationTime >= timeCom) {
+    comunicacion();
+    comunicationTime = 0;
+  }
+  
+  while(loopTime < h_us){        
+  };
+  
+  if (n % 1 == 0) {
+    char buffn[8];
+    dtostrf(y_fil, 5, 2 , buffn);
+    char buffref[6];
+    //dtostrf(dataref, 3, 1 , buffref);
+    dtostrf(r, 4, 1 , buffref);
+    char answer[33]="";
+    char* formato="%s,%s";
+    sprintf(answer, formato, buffn, buffref);
+    //Serial.print(" ");
+    //Serial.println(answer);
+    send(answer);
+  }
+
+
+}
+
+void comunicacion(){
+      if(esp.readData() == "banderakp") {
+        send("exito");
+        banderakp = true;
+        banderaki = false;
+        banderakd = false;  
+        banderaref = false;
+        banderaPeriodo = false;
+    } else if (esp.readData() == "banderaki") {
+        send("exito");
+        banderaki = true;
+        banderakp = false;
+        banderakd = false;
+        banderaref = false;
+        banderaPeriodo = false;
+    } else if (esp.readData() == "banderakd") {
+        send("exito");
+        banderakd = true;
+        banderaki = false;
+        banderakp = false;
+        banderaref = false;
+        banderaPeriodo = false;
+    } else if (esp.readData() == "banderaref") {
+        send("exito");
+        banderakd = false;
+        banderaki = false;
+        banderakp = false;
+        banderaref = true;
+        banderaPeriodo = false;
+    } else if (esp.readData() == "banderaPeriodo") {
+        send("exito");
+        banderakd = false;
+        banderaki = false;
+        banderakp = false;
+        banderaref = false;
+        banderaPeriodo = true;
+    }
+    if(banderakp == true) {
+      datakpAnt = esp.readData();
+      if((datakpAnt == "banderakp")){  
+      } else {
+        datakp = datakpAnt.toFloat(); 
+      }
+    } else if(banderaki == true) {
+        datakiAnt = esp.readData();
+        if((datakiAnt == "banderakp") || (datakiAnt == "banderakd") || (datakiAnt == "banderaki")){   
+        } else {
+          dataki = datakiAnt.toFloat();
+        }  
+    } else if(banderakd == true) {
+        datakdAnt = esp.readData();
+        if((datakdAnt == "banderakp") || (datakdAnt == "banderaki") || (datakdAnt == "banderakd")){   
+        } else {
+          datakd = datakdAnt.toFloat();
+        }
+    } else if(banderaref == true) {
+        datarefAnt = esp.readData();
+        if((datarefAnt == "banderakp") || (datarefAnt == "banderaref")){   
+        } else {
+          dataref = datarefAnt.toFloat();
+        }
+    } else if(banderaPeriodo == true) {
+        dataPeriodoAnt = esp.readData();
+        if((dataPeriodoAnt == "banderakp") || (dataPeriodoAnt == "banderaPeriodo")){  
+        } else {
+          dataPeriodo = dataPeriodoAnt.toFloat();
+        }
+    }   
+}
+
+// fitro digital de butterworth
+float filtro( float y) {
+  float yfil=0; 
+
+      x1n =   1.279632 *x1   -0.4775923*x2 +  0.04948996*y;
+      x2n = x1;
+      yfil =  3.279632 *x1 +  0.5224078*x2 +   0.04948996*y;
+ // actualización de variables de estado 
+      x1=x1n;
+      x2=x2n;
+   return yfil;   
+}
+
+void analogWrite10(unsigned int val) {
+  OCR1B = 1023 - val;
+}
+
+// rutinas de conversion analogica digital
+/* Configure digital pins 9 and 10 as 12-bit PWM outputs. */
+void setupPWM10() {
+    DDRB |= _BV(PB1) | _BV(PB2);        /* set pins as outputs */
+    TCCR1A = _BV(COM1A1) | _BV(COM1B1)  /* non-inverting PWM */
+        | _BV(WGM11);                   /* mode 14: fast PWM, TOP=ICR1 */
+    TCCR1B = _BV(WGM13) | _BV(WGM12)
+        | _BV(CS10);                    /* no prescaling */
+    ICR1 = 0x03ff;                      /* TOP counter value */
+}
+
+/* 10-bit version of analogWrite(). Works only on pin 10. */
+float saturate(float value, float minval, float maxval) {
+   if (value > maxval) value = maxval;
+   if (value < minval ) value = minval;
+   return (float) value;
+}
+
+void resetSensor() {
+    digitalWrite(A0, LOW);
+    delay(20);
+    sensor.init();
+    digitalWrite(A0, HIGH);  
+    delay(20);   
+}
