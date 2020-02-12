@@ -1,5 +1,5 @@
 # LaboratorioControl
-Repositorio del laboratorio de control, contiene los códigos para el funcionamiento del laboratorio, descargar la carpeta y ejecutar el archivo broker.js con el comando "node broker.js".
+Repositorio del laboratorio de control, contiene los códigos para el funcionamiento del laboratorio, descargar la carpeta, separar las guías y los códigos del Arduino y NodeMCU y ejecutar el archivo broker.js con el comando "node broker.js".
 
 El servidor contiene una serie de frameworks y paquetes en uso, sin embargo, lo mejor para el usuario es instalarlos por cuenta propia, ya que las versiones pueden variar en gran medida. 
 
