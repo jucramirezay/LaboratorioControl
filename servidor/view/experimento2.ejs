@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+        <head>
+                <meta charset="UTF-8">
+                <script src="Chart.js"></script>
+                <script src="/socket.io/socket.io.js" ></script>
+        </head>     
+        <body>
+          <p>
+            <nav>
+              <u1>
+                <li><a href="/" target="_self"> 
+                  <button type="button" id="home">Volver al home</button></a></li>
+              </u1>
+            </nav>      
+          </p>
+          <div class="chart-container" style="position: relative; height:80vh; width:80vw">
+            <canvas id="mycanvas"></canvas>
+          </div>
+          <div> 
+            <p id="resultado"></p>
+          </div>
+          <p>	
+            <input type="text" id="kp" />
+            <input type="button" value="constante proporcional" id="constantep"/>
+            <input type="text" id="kd" />
+            <input type="button" value="Constante Derivativa" id="constanted"/>
+            <input type="text" id="ki" />
+            <input type="button" value="Constante Integral" id="constantei"/>
+            <input type="text" id="ref" />
+            <input type="button" value="Referencia" id="referencia"/>
+            <input type="text" id="per" />
+            <input type="button" value="Periodo" id="periodo"/>
+          </p>
+          <script src="clientExp2.js" charset="utf-8"></script>
+        </body>
+</html>
+
+
+
+
