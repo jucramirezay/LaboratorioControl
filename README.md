@@ -1,5 +1,5 @@
 # LaboratorioControl
-Repositorio del laboratorio de control, contiene los códigos para el funcionamiento del laboratorio, descargar la carpeta, separar las guías y los códigos del Arduino y NodeMCU y ejecutar el archivo broker.js con el comando "node broker.js".
+Repositorio del laboratorio de control, contiene los códigos para el funcionamiento del laboratorio, descargar la carpeta, separar las guías y los códigos del Arduino y NodeMCU y ejecutar el archivo broker.js que se encuentra en la carpeta "servidor" con el comando "node broker.js".
 
 El servidor contiene una serie de frameworks y paquetes en uso, sin embargo, lo mejor para el usuario es instalarlos por cuenta propia, ya que las versiones pueden variar en gran medida. 
 
@@ -7,7 +7,7 @@ Para instalar los paquetes basta con utilizar el comando.
 
 npm install nombrePaquete --save
 
-En muchos casos es necesario el uso del super usuario (sudo) para realizar la instalación de manera correcta. La isntalación se debe realizar en la carpeta raiz del servidor, es decir, la caperta donde esta ubicado el archivo broker.js. A continuación se brinda el ejemplo de como instalar los paquetes utilizados en el servidor.
+En muchos casos es necesario el uso del super usuario (sudo) para realizar la instalación de manera correcta. La instalación se debe realizar en la carpeta raiz del servidor, es decir, la caperta donde esta ubicado el archivo broker.js. A continuación se brinda el ejemplo de como instalar los paquetes utilizados en el servidor.
 
 sudo npm install chart.js --save \\
 sudo npm install ejs --save \\
