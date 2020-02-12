@@ -1,0 +1,297 @@
+#include "SPISlave.h"
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+
+const char* ssid = "CONTROL";
+const char* password = "control2019";
+const char* mqtt_server = "192.168.4.1";
+String topic2 = "";
+bool banderakp = false;
+bool banderaki = false;
+bool banderakd = false;
+bool banderaref = false;
+bool banderaPeriodo = false;
+bool banderaArraykp = false;
+bool banderaArrayki = false;
+bool banderaArraykd = false;
+bool banderaArrayref = false;
+bool banderaArrayPeriodo = false;
+char dataArraykp[33];
+char dataArrayki[33];
+char dataArraykd[33];
+char dataArrayref[33];
+char dataArrayPeriodo[33];
+char dataArraymqttaccept[33];
+int datamqtt2 = 0;
+String maestro = "";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+long lastMsg = 0;
+String msg;
+char message[] = " ";
+char msgLast[] = " "; 
+
+
+void setup_wifi() {
+
+  delay(10);
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Conectado a la red: ");
+  Serial.println(ssid);
+  Serial.print("Dirección IP placa: ");
+  Serial.println(WiFi.localIP());
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  topic2 = String(topic);
+
+  if(topic2 == "mqttaccept2"){
+    Serial.print("A llegado un mensaje del topic: ");
+    Serial.print(topic);
+    Serial.print(": ");
+    for (int i = 0; i < length; i++) {
+     dataArraymqttaccept[i] = (char)payload[i];
+    }
+    datamqtt2 = (String(dataArraymqttaccept)).toInt();
+    Serial.println(datamqtt2);
+  } else if(topic2 == "constantes/experimento2/kp"){
+    Serial.print("A llegado un mensaje del topic: ");
+    Serial.print(topic);
+    Serial.print(": ");
+    banderakp = true;
+    banderaki = false;
+    banderakd = false;
+    banderaref = false;
+    banderaPeriodo = false;
+    for (int i = 0; i < length; i++) {
+     dataArraykp[i] = (char)payload[i];
+    }
+    Serial.println(dataArraykp);
+  } else if(topic2 == "constantes/experimento2/kd"){
+    Serial.print("A llegado un mensaje del topic: ");
+    Serial.print(topic);
+    Serial.print(": ");
+    banderakp = false;
+    banderaki = false;
+    banderakd = true;
+    banderaref = false;
+    banderaPeriodo = false;
+    for (int i = 0; i < length; i++) {
+      dataArraykd[i] = (char)payload[i];
+    }
+    Serial.println(dataArraykd);
+  } else if(topic2 == "constantes/experimento2/ki"){
+    char dataArray[length];
+    Serial.print("A llegado un mensaje del topic: ");
+    Serial.print(topic);
+    Serial.print(": ");
+    banderakp = false;
+    banderaki = true;
+    banderakd = false;
+    banderaref = false;
+    banderaPeriodo = false;
+    for (int i = 0; i < length; i++) {
+      dataArrayki[i] = (char)payload[i];
+    }
+    Serial.println(dataArrayki);  
+  } else if(topic2 == "constantes/experimento2/ref"){
+    Serial.print("A llegado un mensaje del topic: ");
+    Serial.print(topic);
+    Serial.print(": ");
+    banderakp = false;
+    banderaki = false;
+    banderakd = false;
+    banderaref = true;
+    banderaPeriodo = false;
+    for (int i = 0; i < length; i++) {
+      dataArrayref[i] = (char)payload[i];
+    }
+    Serial.println(dataArrayref);
+  }  else if(topic2 == "constantes/experimento2/periodo"){
+      Serial.print("A llegado un mensaje del topic: ");
+      Serial.print(topic);
+      Serial.print(": ");
+      banderakp = false;
+      banderaki = false;
+      banderakd = false;
+      banderaref = false;
+      banderaPeriodo = true;
+      for (int i = 0; i < length; i++) {
+        dataArrayPeriodo[i] = (char)payload[i];
+      }
+      Serial.println(dataArrayPeriodo);
+    }
+}
+
+void reconnect() {
+  
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    String clientId = "ESP8266Client-";
+    clientId += "2";
+    
+    if (client.connect(clientId.c_str())) {
+      Serial.println("connected");
+      client.publish("experimento2/arduino", "Hola mundo");
+      client.subscribe("constantes/experimento2/kp", 0);
+      client.subscribe("constantes/experimento2/kd", 0);
+      client.subscribe("constantes/experimento2/ki", 0);
+      client.subscribe("constantes/experimento2/ref", 0);
+      client.subscribe("constantes/experimento2/periodo", 0);
+      client.subscribe("mqttaccept2", 0);
+      if(client.subscribe("constantes/experimento2/kp")) {
+        Serial.println("Cliente suscrito de forma correcta a constantes/experimento2/kp");  
+      }
+      if(client.subscribe("constantes/experimento2/kd")) {
+        Serial.println("Cliente suscrito de forma correcta a constantes/experimento2/kd");  
+      }
+      if(client.subscribe("constantes/experimento2/ki")) {
+        Serial.println("Cliente suscrito de forma correcta a constantes/experimento2/ki");  
+      }
+      if(client.subscribe("constantes/experimento2/ref")) {
+        Serial.println("Cliente suscrito de forma correcta a constantes/experimento2/ki");  
+      }
+      if(client.subscribe("constantes/experimento2/periodo")) {
+        Serial.println("Cliente suscrito de forma correcta a constantes/experimento2/periodo");  
+      }
+      if(client.subscribe("mqttaccept2")) {
+        Serial.println("Cliente suscrito de forma correcta a mqttaccept2");  
+      }
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 2 seconds");
+      delay(2000);
+    }    
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  Serial.setDebugOutput(true);
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+
+    SPISlave.onData([](uint8_t * data, size_t len) {
+    msg = String((char *)data); 
+    maestro = String((char *)data); 
+    (void) len;
+    if (msg.equals("Hello Slave!") && (!client.connected())) {
+      SPISlave.setData("MQTT");
+    } 
+    if (maestro.equals("exito")) {
+      if(banderaArraykp == true) {
+        banderaArraykp = false;
+        SPISlave.setData(dataArraykp);
+        for(int i = 0; i <= 33; i++){
+          dataArraykp[i] = 0;    
+        } 
+        Serial.println("Exito enviado");
+      } else if(banderaArrayki == true) {
+        banderaArrayki = false;
+        SPISlave.setData(dataArrayki); 
+        for(int i = 0; i <= 33; i++){
+          dataArrayki[i] = 0;    
+        }
+        Serial.println("Exito enviado"); 
+      } else if(banderaArraykd == true) {
+        banderaArraykd = false;
+        SPISlave.setData(dataArraykd);
+        for(int i = 0; i <= 33; i++){
+          dataArraykd[i] = 0;    
+        }
+        Serial.println("Exito enviado");
+      } else if(banderaArrayref == true) {
+        banderaArrayref = false;
+        SPISlave.setData(dataArrayref);
+        for(int i = 0; i <= 33; i++){
+          dataArrayref[i] = 0;    
+        }
+        Serial.println("Exito enviado");
+      } else if(banderaArrayPeriodo == true) {
+        banderaArrayPeriodo = false;
+        SPISlave.setData(dataArrayPeriodo);
+        for(int i = 0; i <= 33; i++){
+          dataArrayPeriodo[i] = 0;    
+        }
+        Serial.println("Exito enviado");
+      }
+    }
+    if(banderakp == true) {
+      banderakp = false;
+      SPISlave.setData("banderakp");
+      banderaArraykp = true;
+      banderaArrayki = false;
+      banderaArraykd = false;
+      banderaArrayref = false;
+      banderaArrayPeriodo = false;
+    } else if(banderaki == true) {
+      banderaki = false;
+      SPISlave.setData("banderaki");
+      banderaArrayki = true;
+      banderaArraykp = false;
+      banderaArraykd = false;
+      banderaArrayref = false;
+      banderaArrayPeriodo = false;
+    } else if(banderakd == true) {
+      banderakd = false;
+      SPISlave.setData("banderakd");
+      banderaArraykd = true;
+      banderaArrayki = false;
+      banderaArraykp = false; 
+      banderaArrayref = false;
+      banderaArrayPeriodo = false;
+    } else if (banderaref == true) {
+      banderaref = false;
+      SPISlave.setData("banderaref");
+      banderaArraykd = false;
+      banderaArrayki = false;
+      banderaArraykp = false;
+      banderaArrayref = true;
+      banderaArrayPeriodo = false;
+    }  else if (banderaPeriodo == true) {
+      banderaPeriodo = false;
+      SPISlave.setData("banderaPeriodo");
+      banderaArraykd = false;
+      banderaArrayki = false;
+      banderaArraykp = false;
+      banderaArrayref = false; 
+      banderaArrayPeriodo = true;
+    }
+  });
+
+  SPISlave.begin();
+}
+
+void loop() {
+
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+
+ if(datamqtt2 == 1) {
+ long now = millis();
+  if (now - lastMsg > 10) {
+    lastMsg = now;
+    if(msg.equals("exito")) {
+      msg.toCharArray(msgLast, 33);
+    } else {
+      msg.toCharArray(message, 33);
+      Serial.print("Publish message: ");
+      Serial.println(message);
+      client.publish("experimento2/arduino", message);
+    }
+  }
+ }
+}
