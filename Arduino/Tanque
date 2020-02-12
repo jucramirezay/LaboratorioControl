@@ -1,0 +1,284 @@
+#include "TimerOne.h"
+#include <SPI.h>
+#include <elapsedMillis.h>
+
+// constantes 
+float x1=0, x1n=0;
+float x2=0, x2n=0;
+float x3=0, x3n=0;
+
+float datakp = 8;
+float dataki = 10;
+float datakd = 1.8;
+float dataref = 5;
+float dataPeriodo = 4000;
+String datakdAnt;
+String datakiAnt;
+String datakpAnt;
+String datarefAnt;
+String dataPeriodoAnt;
+bool banderakp = false;
+bool banderaki = false;
+bool banderakd = false;
+bool banderaref = false;
+bool banderaPeriodo = false;
+float i=0;
+
+float u=0;
+float y=0;
+float e = 0;
+float P = 0;
+float I = 0;
+float D = 0;
+float y_ant = 0;
+float I_ant = 0; 
+float kp= datakp; 
+float kd= dataki;
+float ki = datakd;
+float r=0;
+int n=0;
+int Fs = 1000;
+long Ts =1000000/Fs; 
+char ref[33] = "";
+int timeCom = 300;
+int multiplicador = 1000;
+float tiempo;
+
+unsigned h = 30;
+float hseg = float(h)/1000;
+
+float b = 0.1;
+float Tf = 0.1;
+float Tt = 0.05;
+
+float br = hseg/Tt;
+float ad = Tf/(Tf + hseg);
+float bd = kd/(Tf + hseg);  
+float bi =  ki*hseg;  
+
+float ki2 =  ki*float(h)/1000;  // constante ki escalizada
+float kd2 = 1000*kd/float(h);  // constante kd escalizada
+
+elapsedMillis comunicationTime;
+
+class ESPMaster {
+  private:
+    uint8_t _ss_pin;
+
+  public:
+    ESPMaster(uint8_t pin): _ss_pin(pin) {}
+    void begin() {
+      pinMode(_ss_pin, OUTPUT);
+      digitalWrite(_ss_pin, HIGH);
+    }
+
+    uint32_t readStatus() {
+      digitalWrite(_ss_pin, LOW);
+      SPI.transfer(0x04);
+      uint32_t status = (SPI.transfer(0) | ((uint32_t)(SPI.transfer(0)) << 8) | ((uint32_t)(SPI.transfer(0)) << 16) | ((uint32_t)(SPI.transfer(0)) << 24));
+      digitalWrite(_ss_pin, HIGH);
+      return status;
+    }
+
+    void writeStatus(uint32_t status) {
+      digitalWrite(_ss_pin, LOW);
+      SPI.transfer(0x01);
+      SPI.transfer(status & 0xFF);
+      SPI.transfer((status >> 8) & 0xFF);
+      SPI.transfer((status >> 16) & 0xFF);
+      SPI.transfer((status >> 24) & 0xFF);
+      digitalWrite(_ss_pin, HIGH);
+    }
+
+    void readData(uint8_t * data) {
+      digitalWrite(_ss_pin, LOW);
+      SPI.transfer(0x03);
+      SPI.transfer(0x00);
+      for (uint8_t i = 0; i < 32; i++) {
+        data[i] = SPI.transfer(0);
+      }
+      digitalWrite(_ss_pin, HIGH);
+    }
+
+    void writeData(uint8_t * data, size_t len) {
+      uint8_t i = 0;
+      digitalWrite(_ss_pin, LOW);
+      SPI.transfer(0x02);
+      SPI.transfer(0x00);
+      while (len-- && i < 32) {
+        SPI.transfer(data[i++]);
+      }
+      while (i++ < 32) {
+        SPI.transfer(0);
+      }
+      digitalWrite(_ss_pin, HIGH);
+    }
+
+    String readData() {
+      char data[33];
+      data[32] = 0;
+      readData((uint8_t *)data);
+      return String(data);
+    }
+
+    void writeData(const char * data) {
+      writeData((uint8_t *)data, strlen(data));
+    }
+};
+
+ESPMaster esp(SS);
+
+void send(const char * message) {
+  esp.writeData(message);
+}
+
+void setup() {
+  Serial.begin(2000000);
+  SPI.begin();
+  esp.begin();
+  Timer1.initialize(Ts);        
+  Timer1.attachInterrupt(control);
+}
+
+void loop() { 
+  
+}
+
+void control() {
+
+  kp = datakp;     // constante proporcional
+  ki = dataki;      // constante integral
+  kd = datakd;
+
+  Serial.print(r); //salida del controlador
+  Serial.print("\t"); //salida del controlador
+  Serial.println(y); //entrada
+  
+  ki2 =  ki*(float(1)/300);  // constante ki escalizada
+  kd2 = 1000*kd/float(h);  // constante kd escalizada
+    
+  if (n <= (dataPeriodo)){
+    r = dataref;
+    n+=1;
+  } else if (n <= (dataPeriodo*2))  {
+    r=0;
+    n+=1;
+  } else {
+    n=0;
+  }
+
+  e = r-y;
+  P = (kp*e)*2;
+  I = I_ant + ki2*e;
+  //D = kd2*(y - y_ant);
+  D = kd2*e;
+  u = P + I + D;
+  
+  I_ant=I;
+  y_ant=y;
+  
+  x1n = x1 - 0.0005*u; 
+  x2n =  -0.000999991946606639*x1 +  0.999975869690611*x2  +  0.00481412743159997*x3 +  2.49998992578486e-07*u;
+  x3n =  4.97532152344464e-06*x1 - 0.00992603594144324*x2 + 0.985235706317568*x3 -8.30246738217964e-10*u;
+  y = -x3;
+  // actualización de variables de estado 
+  x1=x1n;
+  x2=x2n;
+  x3=x3n; 
+ 
+  /* Controlador netamente proporcional
+  e = r-y; 
+  u = kp*e; 
+ 
+  x1n = x1 - 0.0005*u; 
+ x2n =  -0.000999991946606639*x1 +  0.999975869690611*x2  +  0.00481412743159997*x3 +  2.49998992578486e-07*u;
+  x3n =  4.97532152344464e-06*x1 - 0.00992603594144324*x2 + 0.985235706317568*x3 -8.30246738217964e-10*u;
+  y = -x3;
+  // actualización de variables de estado 
+  x1=x1n;
+  x2=x2n;
+  x3=x3n;*/ 
+  
+  if (n % 10==0){
+    char buffn[5];
+    dtostrf(y, 5, 2 , buffn);
+    char buffref[5];
+    dtostrf(r, 4, 1 , buffref);
+    char answer[33]="";
+    char* formato="%s,%s";
+    sprintf(answer, formato, buffn, buffref);
+    //Serial.print(" ");
+    //Serial.println(answer);
+    send(answer);
+  }
+
+  if(esp.readData() == "banderakp") {
+        send("exito");
+        banderakp = true;
+        banderaki = false;
+        banderakd = false;  
+        banderaref = false;
+        banderaPeriodo = false;
+    } else if (esp.readData() == "banderaki") {
+        send("exito");
+        banderaki = true;
+        banderakp = false;
+        banderakd = false;
+        banderaref = false;
+        banderaPeriodo = false;
+    } else if (esp.readData() == "banderakd") {
+        send("exito");
+        banderakd = true;
+        banderaki = false;
+        banderakp = false;
+        banderaref = false;
+        banderaPeriodo = false;
+    } else if (esp.readData() == "banderaref") {
+        send("exito");
+        banderakd = false;
+        banderaki = false;
+        banderakp = false;
+        banderaref = true;
+        banderaPeriodo = false;
+    } else if (esp.readData() == "banderaPeriodo") {
+        send("exito");
+        banderakd = false;
+        banderaki = false;
+        banderakp = false;
+        banderaref = false;
+        banderaPeriodo = true;
+    }
+    
+   if(banderakp == true) {
+      datakpAnt = esp.readData();
+      if((datakpAnt == "banderakp")){  
+      } else {
+        datakp = datakpAnt.toFloat(); 
+      }
+    } else if(banderaki == true) {
+        datakiAnt = esp.readData();
+        if((datakiAnt == "banderakp") || (datakiAnt == "banderakd") || (datakiAnt == "banderaki")){   
+        } else {
+          dataki = datakiAnt.toFloat();
+        }  
+    } else if(banderakd == true) {
+        datakdAnt = esp.readData();
+        if((datakdAnt == "banderakp") || (datakdAnt == "banderaki") || (datakdAnt == "banderakd")){   
+        } else {
+          datakd = datakdAnt.toFloat();
+        }
+    } else if(banderaref == true) {
+        datarefAnt = esp.readData();
+        if((datarefAnt == "banderakp") || (datarefAnt == "banderaref")){   
+        } else {
+          dataref = datarefAnt.toFloat();
+        }
+    } else if(banderaPeriodo == true) {
+        dataPeriodoAnt = esp.readData();
+        if((dataPeriodoAnt == "banderakp") || (dataPeriodoAnt == "banderaPeriodo")){  
+        } else {
+          dataPeriodo = dataPeriodoAnt.toFloat();
+        }
+    }
+  
+}
