@@ -20,4 +20,7 @@ Estos paquete se instalan en una carpeta llamada node_modules, la cual se ubica 
 
 Se tienen los códigos del Arduino y del NodeMCU para cada experimento. 
 
+Para la impresión del circuito, el archivo que se debe abrir en kicad (o en algún otro visor de pcb) es el denominado Tesis2.2.
+
 Finalmente, se anexan dos guías, una para el uso del laboratorio, explicando brevemente el objetivo de cada experimento, su funcionamiento y la manera de utilizar la interfaz gráfica. La segunda guía indica como anexar un nuevo experimento, demostrando así la escalabilidad del laboratorio. 
+
